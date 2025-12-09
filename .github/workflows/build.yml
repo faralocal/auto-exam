@@ -1,0 +1,71 @@
+name: Build App with Browser
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:  # اجازه می‌دهد دستی هم بیلد را شروع کنید
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: Linux_App
+            sep: ":"  # جداکننده مسیر در لینوکس
+          - os: windows-latest
+            artifact_name: Windows_App.exe
+            sep: ";"  # جداکننده مسیر در ویندوز
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies
+      run: |
+        pip install -r requirements.txt
+        playwright install chromium
+
+    # --- مرحله مخصوص لینوکس ---
+    - name: Build on Linux
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        # پیدا کردن مسیر نصب شده کرومیوم
+        CHROMIUM_PATH=$(find ~/.cache/ms-playwright -name "chromium-*" -type d | head -n 1)
+        FOLDER_NAME=$(basename "$CHROMIUM_PATH")
+        echo "Found Chromium at: $CHROMIUM_PATH"
+        
+        # اجرای پای‌اینستالر
+        pyinstaller --noconfirm --onefile --console --name "AutoBrowser_Linux" \
+          --add-data "static${{ matrix.sep }}static" \
+          --add-data "$CHROMIUM_PATH${{ matrix.sep }}pw-browsers/$FOLDER_NAME" \
+          app.py
+
+    # --- مرحله مخصوص ویندوز ---
+    - name: Build on Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        # پیدا کردن مسیر کرومیوم با پاورشل
+        $CHROMIUM_PATH = Get-ChildItem -Path "$env:LOCALAPPDATA\ms-playwright\chromium-*" -Directory | Select-Object -First 1 -ExpandProperty FullName
+        $FOLDER_NAME = Split-Path $CHROMIUM_PATH -Leaf
+        Write-Host "Found Chromium at: $CHROMIUM_PATH"
+        
+        # اجرای پای‌اینستالر
+        pyinstaller --noconfirm --onefile --console --name "AutoBrowser_Windows" `
+          --add-data "static${{ matrix.sep }}static" `
+          --add-data "$CHROMIUM_PATH${{ matrix.sep }}pw-browsers\$FOLDER_NAME" `
+          app.py
+
+    # --- آپلود فایل نهایی ---
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: dist/
+        retention-days: 5
