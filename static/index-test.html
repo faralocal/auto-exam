@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+
+    <div id="app">
+
+        <div z-for="item in user.list">1111</div>
+
+        <table class="table table-xs table-pin-rows">
+            <thead>
+                <tr>
+                    <th z-for="header in user.list">{{ header }}</th>
+                </tr>
+            </thead>
+            <tbody>
+
+            </tbody>
+        </table>
+
+        <button @click="addItem">Add Item </button>
+    </div>
+
+
+    <script type="module">
+        import { reactive, createApp } from './libs/zog.js'
+
+        createApp(() => {
+            const user = reactive({ list: [] });
+
+            const addItem = () => {
+                user.list.push({ name: 'ben' })
+            }
+
+            return { user, addItem };
+
+        }).mount('#app')
+
+    </script>
+
+</body>
+
+</html>

@@ -1,0 +1,6 @@
+flask
+pandas
+playwright
+pyinstaller
+werkzeug
+openpyxl

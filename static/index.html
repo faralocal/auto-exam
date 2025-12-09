@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Workflow Manager</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+        .fade-enter, .fade-leave-to { opacity: 0; }
+        .cursor-pointer { cursor: pointer; }
+    </style>
+</head>
+<body class="bg-base-300 min-h-screen font-sans text-base-content">
+
+    <div id="app" class="container mx-auto p-4 max-w-4xl relative">
+        
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold text-primary mb-2">Automation Dashboard</h1>
+            <p class="text-gray-500">Manage Users and Workflows</p>
+        </header>
+
+        <!-- --- MODALS --- -->
+        <dialog class="modal" :class="{ 'modal-open': notification.show }">
+            <div class="modal-box text-center border border-gray-600 shadow-2xl bg-base-100">
+                <div class="text-5xl mb-4">
+                    {{ notification.type === 'error' ? '❌' : '✅' }}
+                </div>
+                <h3 class="font-bold text-lg mb-2">
+                    {{ notification.type === 'error' ? 'Error!' : 'Success!' }}
+                </h3>
+                <p class="py-4 text-lg">{{ notification.message }}</p>
+                <div class="modal-action justify-center">
+                    <button class="btn btn-primary btn-wide" @click="closeNotify">OK</button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop" @click="closeNotify">
+                <button>close</button>
+            </form>
+        </dialog>
+
+        <dialog class="modal" :class="{ 'modal-open modal': deleteState.show }">
+            <div class="modal-box border border-error shadow-error/20">
+                <h3 class="font-bold text-lg text-error">⚠ Delete Confirmation</h3>
+                <p class="py-4">
+                    Are you sure you want to delete this file?<br/>
+                    <span class="font-bold text-white block mt-2 p-2 bg-base-300 rounded text-center">{{ deleteState.filename }}</span>
+                </p>
+                <div class="modal-action">
+                    <button class="btn btn-ghost" @click="cancelDelete">Cancel</button>
+                    <button class="btn btn-error" @click="confirmDeleteAction" :class="{'loading': deleteState.loading}">
+                        Yes, Delete it
+                    </button>
+                </div>
+            </div>
+        </dialog>
+
+        <!-- --- MAIN CONTENT --- -->
+
+        <!-- PAGE 1: USER EXCEL LIST -->
+        <!-- تغییر شرط: فقط زمانی که اکسل انتخاب نشده و در حال مشاهده محتوا نیستیم نمایش داده شود -->
+        <div z-if="!currentExcel && !viewingExcel" class="card bg-base-100 shadow-xl animate-fade-in">
+            <div class="card-body">
+                <h2 class="card-title text-2xl mb-4 flex justify-between items-center">
+                    User Lists (Excel)
+                    <div class="join">
+                        <input type="file" @change="handleUserUpload" class="file-input file-input-bordered file-input-primary w-full max-w-xs join-item" accept=".xlsx, .xls" />
+                        <button class="btn btn-primary join-item" :class="{'loading': uploading}">
+                            Upload Excel
+                        </button>
+                    </div>
+                </h2>
+                
+                <div class="overflow-x-auto mt-4">
+                    <table class="table table-zebra w-full">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>File Name</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr z-for="file in excelFiles" :key="file" class="hover">
+                                <th>{{ index + 1 }}</th>
+                                <td class="font-bold cursor-pointer text-secondary" @click="selectExcelEvent">
+                                    {{ file }}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-error btn-outline" 
+                                            :data-name="file" 
+                                            @click="onDeleteUserClick">
+                                        Delete
+                                    </button>
+                                    
+                                    <!-- (جدید) دکمه مشاهده محتوا -->
+                                    <button class="btn btn-sm btn-info btn-outline ml-2" 
+                                            :data-name="file"
+                                            @click="onViewExcelClick">
+                                        View Content
+                                    </button>
+
+                                    <button class="btn btn-sm btn-ghost ml-2" 
+                                            :data-name="file"
+                                            @click="selectExcelEvent">
+                                        Select →
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr z-if="excelFiles.length === 0">
+                                <td colspan="3" class="text-center text-gray-500 py-4">No Excel files found. Upload one!</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- (جدید) PAGE 3: EXCEL CONTENT VIEW -->
+        <div z-if="viewingExcel" class="card bg-base-100 shadow-xl animate-fade-in">
+            <div class="card-body">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="card-title text-2xl">
+                        Content: <span class="text-secondary">{{ viewingExcelFile }}</span>
+                    </h2>
+                    <!-- دکمه بازگشت -->
+                    <button class="btn btn-outline" @click="closeExcelView">Back / Close</button>
+                </div>
+
+                <!-- لودینگ برای بارگذاری داده‌ها -->
+                <div :data-row="excelData.rows.length" z-if="excelData.loading" class="flex justify-center p-10">
+                    <span class="loading loading-spinner loading-lg text-info"></span>
+                </div>
+                
+                
+                <!-- جدول نمایش داده‌ها -->
+                <div :data-row="excelData.rows.length" z-else class="overflow-x-auto max-h-[70vh]">
+                    <table class="table table-xs table-pin-rows">
+                        <thead>
+                            <tr>
+                                <th z-for="header in excelData.headers">{{ header }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr z-for="row in excelData.rows">
+                                <td z-for="cell in row">{{ cell }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div z-if="excelData.rows.length === 0" class="text-center p-4 text-gray-500">
+                        File is empty or could not be read.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PAGE 2: WORKFLOW SELECTION -->
+        <!-- تغییر شرط: به جای z-else از شرط صریح استفاده کردیم -->
+        <div z-if="currentExcel" class="card bg-base-100 shadow-xl animate-fade-in">
+            <div class="card-body">
+                <div class="text-sm breadcrumbs mb-4">
+                    <ul>
+                        <li><a @click="goBack" class="text-gray-400 hover:text-white cursor-pointer">Home</a></li>
+                        <li class="font-bold text-primary">{{ currentExcel }}</li>
+                    </ul>
+                </div>
+
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="card-title text-2xl">Select a Workflow</h2>
+                    <div class="join">
+                        <input type="file" @change="handleWorkflowUpload" class="file-input file-input-sm file-input-bordered file-input-secondary w-full max-w-xs join-item" accept=".json" />
+                        <button class="btn btn-sm btn-secondary join-item" :class="{'loading': uploading}">
+                            Upload JSON
+                        </button>
+                    </div>
+                </div>
+
+                <div z-if="workflowFiles.length === 0" class="alert alert-warning">
+                    <span>No workflow JSON files found in 'uploads/workflows'. Upload one above!</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div z-for="wf in workflowFiles" :key="wf" 
+                         class="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer border border-transparent hover:border-primary relative"
+                         :data-name="wf"
+                         @click="runWorkflowEvent">
+                         
+                        <div class="card-body p-6 flex flex-row items-center gap-4">
+                            <div class="text-3xl">⚡</div>
+                            <div class="flex-1">
+                                <h3 class="font-bold text-lg">{{ wf }}</h3>
+                                <p class="text-xs text-gray-500">Click to execute</p>
+                            </div>
+                            
+                            <button class="btn btn-sm btn-circle btn-ghost text-error absolute top-2 right-2 z-10" 
+                                    :data-name="wf"
+                                    @click="onDeleteWorkflowClick"
+                                    title="Delete Workflow">
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div z-if="executionOutput" class="mockup-code mt-8 bg-black text-success">
+                    <pre data-prefix="$"><code>python appCourse.py ...</code></pre> 
+                    <pre z-for="line in executionOutput.split('\n')" :key="line" data-prefix=">"><code>{{ line }}</code></pre>
+                </div>
+                
+                <div z-if="executing" class="flex justify-center mt-8">
+                    <span class="loading loading-spinner loading-lg text-primary"></span>
+                    <span class="ml-2 mt-1">Running Workflow...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createApp, ref, reactive, nextTick, watchEffect } from './libs/zog.js';
+
+        createApp(() => {
+            // --- State ---
+            const excelFiles = ref([]);
+            const workflowFiles = ref([]);
+            const currentExcel = ref(null);
+            
+            // (جدید) استیت‌های مربوط به مشاهده محتوا
+            const viewingExcel = ref(false);
+            const viewingExcelFile = ref('');
+            const excelData = reactive({ headers: [], rows: [], loading: false });
+
+            const uploading = ref(false);
+            const executing = ref(false);
+            const executionOutput = ref(null);
+            
+            const notification = reactive({ show: false, message: '', type: 'success' });
+            const deleteState = reactive({ show: false, folder: '', filename: '', loading: false });
+
+            // --- Helpers ---
+            const showNotify = (msg, type = 'success') => {
+                notification.show = true;
+                notification.type = type;
+                notification.message = msg;
+            };
+            const closeNotify = () => { notification.show = false; };
+            const cancelDelete = () => { deleteState.show = false; };
+
+            const promptDelete = (folder, filename) => {
+                deleteState.show = true;
+                deleteState.folder = folder;
+                deleteState.filename = filename;
+                deleteState.loading = false;                
+            };
+
+            const onDeleteUserClick = (e) => {
+                e.stopPropagation();
+                const filename = e.currentTarget.getAttribute('data-name');
+                if(filename) promptDelete('users', filename);
+            };
+
+            const onDeleteWorkflowClick = (e) => {
+                e.stopPropagation();
+                const filename = e.currentTarget.getAttribute('data-name');
+                if(filename) promptDelete('workflows', filename);
+            };
+
+            const confirmDeleteAction = async () => {
+                const { folder, filename } = deleteState;
+                deleteState.loading = true;
+                try {
+                    const res = await fetch(`/delete/${folder}/${filename}`, { method: 'DELETE' });
+                    if (res.ok) {
+                        deleteState.show = false;
+                        showNotify(`File '${filename}' deleted!`);
+                        fetchFiles(folder);
+                    } else {
+                        showNotify('Failed to delete.', 'error');
+                    }
+                } catch (e) {
+                    showNotify('Network error.', 'error');
+                } finally {
+                    deleteState.loading = false;
+                }
+            };
+
+            // --- API Logic ---
+            const fetchFiles = async (folder) => {
+                try {
+                    const res = await fetch(`/files/${folder}`);
+                    const data = await res.json();
+                    if (folder === 'users') excelFiles.value = data;
+                    if (folder === 'workflows') workflowFiles.value = data;
+                } catch (e) {
+                    console.error("Fetch error:", e);
+                }
+            };
+
+            const uploadFile = async (file, folder) => {
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                uploading.value = true;
+                try {
+                    const res = await fetch(`/upload/${folder}`, { method: 'POST', body: formData });
+                    if (res.ok) {
+                        showNotify('Upload successful!');
+                        fetchFiles(folder);
+                    } else {
+                        showNotify('Upload failed.', 'error');
+                    }
+                } catch (e) {
+                    showNotify('Error uploading.', 'error');
+                } finally {
+                    uploading.value = false;
+                }
+            };
+
+            // (جدید) هندلر برای کلیک روی دکمه View Content
+            const onViewExcelClick = async (e) => {
+                e.stopPropagation(); // جلوگیری از انتخاب فایل (رفتن به ورک‌فلو)
+
+                console.log('#click : onViewExcelClick');
+                
+                const filename = e.currentTarget.getAttribute('data-name');
+                if (!filename) return;
+                console.log('#click : has file name : '+filename);
+
+                viewingExcelFile.value = filename;
+                viewingExcel.value = true;
+                excelData.loading = true;
+                excelData.headers = [];
+                excelData.rows = [];
+
+                try {
+                    const res = await fetch(`/view-excel/${filename}`);
+                    if(res.ok) {
+                        const data = await res.json();
+                        excelData.headers = data.headers;
+                        excelData.rows = data.rows;
+                        await nextTick();
+                        console.log( 'init excelData.rows : ', excelData.rows);
+                        
+                    } else {
+                        showNotify('Failed to load excel content', 'error');
+                        viewingExcel.value = false;
+                    }
+                } catch(err) {
+                     showNotify('Error loading file', 'error');
+                     viewingExcel.value = false;
+                } finally {
+                    excelData.loading = false;
+                }
+            };
+
+            // (جدید) بستن صفحه اکسل
+            const closeExcelView = () => {
+                console.log('closeExcelView');
+                
+                viewingExcel.value = false;
+                viewingExcelFile.value = '';
+                excelData.headers = [];
+                excelData.rows = [];
+            };
+
+            const handleUserUpload = (e) => { uploadFile(e.target.files[0], 'users'); e.target.value = ''; };
+            const handleWorkflowUpload = (e) => { uploadFile(e.target.files[0], 'workflows'); e.target.value = ''; };
+
+            const selectExcelEvent = (e) => {
+                const filename = e.currentTarget.getAttribute('data-name') || e.currentTarget.textContent.trim();
+                if(filename) {
+                    currentExcel.value = filename;
+                    executionOutput.value = null; 
+                    fetchFiles('workflows'); 
+                }
+            };
+
+            const goBack = () => {
+                currentExcel.value = null;
+                executionOutput.value = null;
+            };
+
+            const runWorkflowEvent = async (e) => {
+                if (executing.value) return;
+                const workflowName = e.currentTarget.getAttribute('data-name');
+                if(!workflowName) return;
+
+                executing.value = true;
+                executionOutput.value = null;
+                try {
+                    const res = await fetch('/run-workflow', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ excelFile: currentExcel.value, workflowFile: workflowName })
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        executionOutput.value = data.output || "Completed.";
+                        showNotify('Workflow executed!');
+                    } else {
+                        executionOutput.value = `Error: ${data.output || data.error}`;
+                        showNotify('Execution failed.', 'error');
+                    }
+                } catch (e) {
+                    showNotify('Network error.', 'error');
+                } finally {
+                    executing.value = false;
+                }
+            };
+
+            fetchFiles('users');
+            console.log("App Initialized");
+
+
+            watchEffect(()=>{
+                console.log('we:', excelData.rows);
+                
+            })
+
+            return {
+                excelFiles, workflowFiles, currentExcel, uploading, executing, executionOutput,
+                notification, deleteState,
+                // (جدید)
+                viewingExcel, viewingExcelFile, excelData, onViewExcelClick, closeExcelView,
+                
+                handleUserUpload, handleWorkflowUpload,
+                onDeleteUserClick, onDeleteWorkflowClick, confirmDeleteAction, cancelDelete,
+                closeNotify, goBack,
+                selectExcelEvent, runWorkflowEvent
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

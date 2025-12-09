@@ -1,0 +1,17 @@
+{
+  "dependencies": {
+    "zogjs": "^0.2.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.17",
+    "bun-plugin-tailwind": "^0.1.2",
+    "daisyui": "^5.5.8",
+    "tailwindcss": "^4.1.17"
+  },
+  "scripts": {
+    "build:css": "bunx @tailwindcss/cli -i ./styles.input.css -o ./static/styles.css --watch",
+    "build:current": "bun build --compile server.js --outfile auto_exam",
+    "serve": "python app.py",
+    "dev": "bun run serve & bun run build:css"
+  }
+}

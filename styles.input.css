@@ -1,0 +1,4 @@
+/* styles.input.css — Tailwind v4 style */
+@import "tailwindcss";
+@plugin "daisyui";
+/* اگر می‌خوای css اختصاصی بنویسی، اینجا بگذار */
