@@ -3,3 +3,6 @@
 /node_modules
 /uploads
 /build
+/__py*
+/browser/__py*
+*_profile
