@@ -1,9 +1,9 @@
 name: Build App with Browser
 
 on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:  # اجازه می‌دهد دستی هم بیلد را شروع کنید
+  release:
+    types: [published]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -14,10 +14,10 @@ jobs:
         include:
           - os: ubuntu-latest
             artifact_name: Linux_App
-            sep: ":"  # جداکننده مسیر در لینوکس
+            sep: ":"
           - os: windows-latest
             artifact_name: Windows_App.exe
-            sep: ";"  # جداکننده مسیر در ویندوز
+            sep: ";"
 
     steps:
     - uses: actions/checkout@v4
@@ -62,10 +62,21 @@ jobs:
           --add-data "$CHROMIUM_PATH${{ matrix.sep }}pw-browsers\$FOLDER_NAME" `
           app.py
 
-    # --- آپلود فایل نهایی ---
+    # --- آپلود فایل نهایی به عنوان Artifact (برای دانلود موقت) ---
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.artifact_name }}
         path: dist/
         retention-days: 5
+
+    # --- (اختیاری و جذاب) آپلود خودکار فایل‌ها به صفحه Release ---
+    # این مرحله فایل‌های exe را مستقیم می‌چسباند به همان ریلیزی که ساختید
+    - name: Upload binaries to Release
+      uses: svenstaro/upload-release-action@v2
+      with:
+        repo_token: ${{ secrets.GITHUB_TOKEN }}
+        file: dist/*
+        tag: ${{ github.ref }}
+        overwrite: true
+        file_glob: true
