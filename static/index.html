@@ -5,14 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Workflow Manager</title>
     
-    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.4.19/dist/full.min.css" rel="stylesheet" type="text/css" />
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
     
     <style>
         .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
         .fade-enter, .fade-leave-to { opacity: 0; }
         .cursor-pointer { cursor: pointer; }
     </style>
+
+
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <script>
+        // فورس ری‌فریش در صورت تغییر سایز پنجره
+window.addEventListener('resize', () => {
+    console.log('Window resized to:', window.innerWidth, 'x', window.innerHeight);
+    // فورس ری-رندر برای Zog
+    if (window.app && window.app.$forceUpdate) {
+        window.app.$forceUpdate();
+    }
+});
+    </script>
+
 </head>
 <body class="bg-base-300 min-h-screen font-sans text-base-content">
 
@@ -219,7 +235,7 @@
     </div>
 
     <script type="module">
-        import { createApp, ref, reactive, nextTick, watchEffect } from './libs/zog.js';
+        import { createApp, ref, reactive, nextTick, watchEffect } from './libs/zog.es.js';
 
         createApp(() => {
             // --- State ---
@@ -432,6 +448,19 @@
                 selectExcelEvent, runWorkflowEvent
             }
         }).mount('#app');
+
+        // window.addEventListener('resize', () => {
+        //     console.log('change resize screen');
+            
+        // // اگر در اپت فانکشن وجود داره که layout رو دوباره می‌سازه، صداش کن
+        // if (typeof recalcLayout === 'function') recalcLayout();
+        // // یا اگر فانکشن خاص نداری، میتونی یک resize مصنوعی ارسال کنی تا فریم‌ورک‌هایی که به resize گوش میدن کار کنند:
+        // window.dispatchEvent(new Event('resize'));
+        // });
+
     </script>
+
+   
+
 </body>
 </html>
