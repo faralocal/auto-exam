@@ -1467,13 +1467,14 @@ def run(
     logger.info(f"📁 Profile dir: {profile}")
     logger.info(f"🖥️ Viewport: {width}x{height}")
 
+    # ---------------- Stealth / Chrome mimic settings ----------------
     CHROME_UA = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/123.0.6312.86 Safari/537.36"
     )
     LOCALE = "en-US"
     ACCEPT_LANG = "en-US,en;q=0.9"
-    TIMEZONE_ID = "Asia/Tehran"
+    TIMEZONE_ID = "Asia/Tehran"  # change if you want another timezone
 
     chromium_args = [
         f"--window-size={width},{height}",
@@ -1483,64 +1484,27 @@ def run(
         "--no-default-browser-check",
         "--no-first-run",
         "--disable-features=IsolateOrigins,site-per-process",
+        # "--disable-gpu",           # optional
+        # "--no-sandbox",            # optional (use only if you know what you're doing)
     ]
 
+    # Minimal stealth script (good enough to hide navigator.webdriver)
     stealth_js = r"""
 (() => {
   try {
-    Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
-    try { Object.defineProperty(navigator, 'languages', { get: () => ['en-US','en'], configurable: true }); } catch (e) {}
-    try { Object.defineProperty(navigator, 'plugins', { get: () => [{name:'Chrome PDF Plugin', filename:'internal-pdf-viewer'}], configurable: true }); } catch (e) {}
-    try { Object.defineProperty(navigator, 'mimeTypes', { get: () => [{type:'application/pdf', suffixes:'pdf'}], configurable: true }); } catch (e) {}
-    try { window.chrome = window.chrome || { runtime: {} }; } catch (e) {}
-    try {
-      Object.defineProperty(navigator, 'platform', { get: () => 'Win32', configurable: true });
-      Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.', configurable: true });
-      Object.defineProperty(navigator, 'appVersion', { get: () => '5.0 (Windows)', configurable: true });
-    } catch (e) {}
-    try { Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8, configurable: true }); } catch (e) {}
-    try { Object.defineProperty(navigator, 'deviceMemory', { get: () => 8, configurable: true }); } catch (e) {}
-    try {
-      const origQuery = navigator.permissions && navigator.permissions.query;
-      if (origQuery) {
-        navigator.permissions.query = function(parameters) {
-          if (parameters && parameters.name === 'notifications') {
-            return Promise.resolve({ state: Notification.permission });
-          }
-          return origQuery(parameters);
-        };
-      }
-    } catch (e) {}
-    try {
-      if (navigator.userAgentData && navigator.userAgentData.brands) {
-        navigator.userAgentData.brands = [{brand: "Chromium", version: "123"}, {brand: "Google Chrome", version: "123"}];
-      }
-    } catch (e) {}
-    try {
-      const getParameter = WebGLRenderingContext.prototype.getParameter;
-      WebGLRenderingContext.prototype.getParameter = function(parameter) {
-        if (parameter === 37445) return "Intel Inc.";
-        if (parameter === 37446) return "Intel(R) HD Graphics 620";
-        return getParameter.call(this, parameter);
-      };
-    } catch (e) {}
-    try {
-      const originalToString = Function.prototype.toString;
-      const myToString = function() {
-        if (this === navigator.permissions.query) {
-          return 'function query() { [native code] }';
-        }
-        return originalToString.apply(this, arguments);
-      };
-      Function.prototype.toString = myToString;
-    } catch (e) {}
-  } catch (err) {}
+    Object.defineProperty(navigator, 'webdriver', {
+      get: () => false,
+      configurable: true
+    });
+  } catch (e) {}
 })();
 """
 
+    # This will store any fatal error from steps
     fatal_error: Optional[Exception] = None
 
     with sync_playwright() as p:
+        # Launch persistent context (profile is reused between runs)
         browser = p.chromium.launch_persistent_context(
             user_data_dir=profile,
             headless=False,
@@ -1554,108 +1518,146 @@ def run(
             extra_http_headers={"Accept-Language": ACCEPT_LANG},
         )
 
+        # Inject stealth script to run before any page script
         try:
             browser.add_init_script(stealth_js)
             logger.info("🔐 Stealth init script injected.")
         except Exception as e:
             logger.warning(f"⚠️ Failed to add stealth init script: {e}")
 
-        page = browser.pages[0] if browser.pages else browser.new_page()
-        current_frame = None
+        try:
+            # Use the first existing page or open a new one
+            page = browser.pages[0] if browser.pages else browser.new_page()
+            current_frame = None  # Track current frame context
 
-        # Optional initial URL
-        if start_url:
-            logger.info(f"🌐 Initial goto: {start_url}")
-            page.goto(start_url)
+            # Optional initial URL
+            if start_url:
+                logger.info(f"🌐 Initial goto: {start_url}")
+                page.goto(start_url)
 
-        # Execute steps (do NOT close browser on failures)
-        for idx, step in enumerate(workflow, start=1):
-            title = get_key(step, "title", "Title", default=f"Step #{idx}")
-            stype = get_key(step, "type")
-            ignore_error = get_key(step, "ignore", default=False)
+            # Main workflow loop
+            for idx, step in enumerate(workflow, start=1):
+                title = get_key(step, "title", "Title", default=f"Step #{idx}")
+                stype = get_key(step, "type")
+                ignore_error = get_key(step, "ignore", default=False)
 
-            logger.info(f"--- Step {idx}: {title} ---")
-            print(f"📝 [Step {idx}] {title}")
+                logger.info(f"--- Step {idx}: {title} ---")
+                print(f"📝 [Step {idx}] {title}")
 
-            if not stype:
-                if ignore_error:
-                    logger.warning("⚠️ Missing 'type' in step, but ignoring error.")
-                    continue
-                fatal_error = RuntimeError('Missing "type" in step.')
-                logger.error(f"❌ Step failed: {title} | {fatal_error}")
-                print(f"❌ [ERROR] {title}: {fatal_error}")
-                break
-
-            stype_l = str(stype).strip().lower()
-
-            try:
-                if stype_l == "goto":
-                    exec_step_goto(page, step)
-                    current_frame = None
-                elif stype_l == "click":
-                    exec_step_click(page, step, current_frame)
-                elif stype_l == "select":
-                    exec_step_select(page, step, current_frame)
-                elif stype_l == "group_excel":
-                    exec_step_group_excel(page, browser, step, current_frame)
-                elif stype_l == "array":
-                    exec_step_array(page, step, current_frame)
-                elif stype_l == "refresh":
-                    exec_step_refresh(page, step)
-                elif stype_l == "group_action":
-                    exec_step_group_action(page, browser, step, current_frame)
-                elif stype_l == "frame":
-                    current_frame = exec_step_frame(page, step)
-                elif stype_l == "main_frame":
-                    current_frame = exec_step_main_frame(page, step)
-                elif stype_l == "write":
-                    exec_step_write(page, step, current_frame)
-                elif stype_l == "use_last_tab":
-                    exec_step_use_last_tab(browser, step)
-                elif stype_l == "scroll":
-                    exec_step_scroll(page, step, current_frame)
-                elif stype_l == "download_from_link":
-                    exec_step_download_from_link(page, step, current_frame)
-                else:
+                if not stype:
                     if ignore_error:
-                        logger.warning(f"⚠️ Unsupported step type but ignoring: '{stype}'")
+                        logger.warning("⚠️ Missing 'type' in step, but ignoring error.")
+                        continue
                     else:
-                        raise RuntimeError(f'Unsupported step type: "{stype}"')
-            except Exception as e:
-                if ignore_error:
-                    logger.warning(f"⚠️ Step failed but ignoring: {title} | {e}")
-                    print(f"⚠️ [WARNING] {title}: {e}")
-                    continue
+                        # This is a hard error: stop workflow
+                        fatal_error = RuntimeError('Missing "type" in step.')
+                        logger.error(f"❌ Step failed: {title} | {fatal_error}")
+                        print(f"❌ [ERROR] {title}: {fatal_error}")
+                        break
 
-                # Stop the automation, but keep the browser open for manual inspection
-                fatal_error = e
-                logger.error(f"❌ Step failed: {title} | {e}")
-                print(f"❌ [ERROR] {title}: {e}")
-                break
+                stype_l = str(stype).strip().lower()
 
-        if fatal_error is None:
-            logger.info("✅ === Workflow completed successfully ===")
-            print("✅ Workflow completed successfully.")
-        else:
-            logger.warning("🛑 === Workflow stopped due to an error (browser stays open) ===")
-            print("🛑 Workflow stopped due to an error (browser stays open).")
+                try:
+                    if stype_l == "goto":
+                        exec_step_goto(page, step)
+                        current_frame = None  # Reset frame context after navigation
 
-        # Keep the browser open until the user closes it manually
-        logger.info("🧭 Close the browser window to finish the script (no auto-close).")
-        print("🧭 Close the browser window to finish the script (no auto-close).")
+                    elif stype_l == "click":
+                        exec_step_click(page, step, current_frame)
 
-        while True:
+                    elif stype_l == "select":
+                        exec_step_select(page, step, current_frame)
+
+                    elif stype_l == "group_excel":
+                        exec_step_group_excel(page, browser, step, current_frame)
+
+                    elif stype_l == "array":
+                        exec_step_array(page, step, current_frame)
+
+                    elif stype_l == "refresh":
+                        exec_step_refresh(page, step)
+
+                    elif stype_l == "group_action":
+                        exec_step_group_action(page, browser, step, current_frame)
+
+                    elif stype_l == "frame":
+                        current_frame = exec_step_frame(page, step)
+
+                    elif stype_l == "main_frame":
+                        current_frame = exec_step_main_frame(page, step)
+
+                    elif stype_l == "write":
+                        exec_step_write(page, step, current_frame)
+
+                    elif stype_l == "use_last_tab":
+                        exec_step_use_last_tab(browser, step)
+
+                    elif stype_l == "scroll":
+                        exec_step_scroll(page, step, current_frame)
+
+                    elif stype_l == "download_from_link":
+                        exec_step_download_from_link(page, step, current_frame)
+
+                    # elif stype_l in ("download_page", "save_page"):
+                    #     exec_step_download_page(page, step)
+
+                    else:
+                        # Unsupported step type
+                        if ignore_error:
+                            logger.warning(
+                                f"⚠️ Unsupported step type but ignoring: '{stype}'"
+                            )
+                        else:
+                            fatal_error = RuntimeError(
+                                f'Unsupported step type: "{stype}"'
+                            )
+                            logger.error(f"❌ Step failed: {title} | {fatal_error}")
+                            print(f"❌ [ERROR] {title}: {fatal_error}")
+                            break
+
+                except Exception as e:
+                    if ignore_error:
+                        # Log and continue to next step
+                        logger.warning(f"⚠️ Step failed but ignoring: {title} | {e}")
+                        print(f"⚠️ [WARNING] {title}: {e}")
+                    else:
+                        # Stop workflow, but DO NOT close the browser automatically
+                        fatal_error = e
+                        logger.error(f"❌ Step failed: {title} | {e}")
+                        print(f"❌ [ERROR] {title}: {e}")
+                        break
+
+            # Summary log
+            if fatal_error is None:
+                logger.info("✅ === Workflow completed successfully ===")
+                print("✅ Workflow completed successfully.")
+            else:
+                logger.warning(
+                    "🛑 === Workflow stopped due to an error (browser left open) ==="
+                )
+                print("🛑 Workflow stopped due to an error (browser left open).")
+
+        finally:
+            # Wait until this browser context is closed by the user.
+            # Important: you must close the whole browser window (not just one tab).
+            logger.info("🧭 Close the browser window to finish the script (no auto-close).")
+            print("🧭 Close the browser window to finish the script (no auto-close).")
+
             try:
-                # context.pages returns currently open pages
-                if len(browser.pages) == 0:
-                    break
-            except Exception:
-                break
-            time.sleep(0.5)
+                # Wait indefinitely (timeout=0) for the context "close" event.
+                # This event fires when the browser for this persistent context is closed.
+                browser.wait_for_event("close", timeout=0)
+            except Exception as e:
+                # If the context is already closed or disconnected, just log and continue.
+                logger.warning(f"⚠️ Error while waiting for browser to close: {e}")
 
-        # After the user closes the browser, propagate the error (if any)
-        if fatal_error is not None:
-            raise fatal_error
+
+
+    # After Playwright context is closed, re-raise any fatal error for the caller
+    if fatal_error is not None:
+        raise fatal_error
+
+
 
 
 
