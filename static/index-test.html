@@ -3,8 +3,30 @@
 
 <head>
     <meta charset="UTF-8">
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0"> -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Document</title>
+
+    <style>
+        * {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;       /* 100 درصد عرض دید */
+    overflow-x: hidden; /* جلوگیری از اسکرول افقی */
+}
+
+/* اگر کانتینر اصلی دارید، عرض آن را محدود کنید */
+.container {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px; /* فضای خالی امن */
+}
+    </style>
 </head>
 
 <body>

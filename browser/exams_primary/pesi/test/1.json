@@ -1,0 +1,19 @@
+[
+  {
+    "type": "group_excel",
+    "file": "./users.xlsx",
+    "start_row": 2,
+    "actions": [
+      {
+        "title": "Open URL",
+        "type": "goto",
+        "url": "https://faramadrak.com",
+        "sleep": 10,
+        "max_retries": 4,
+        "retry_delay": 10,
+        "timeout": 160000
+      }
+      
+    ]
+  }
+]

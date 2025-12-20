@@ -1,0 +1,21 @@
+[
+  {
+    "type": "main_frame",
+    "sleep": 1
+  },
+  {
+    "title": "Open URL",
+    "type": "goto",
+    "url": "https://www.pesi.com/account/myaccount",
+    "sleep": 5,
+    "max_retries": 4,
+    "retry_delay": 10,
+    "timeout": 160000
+  },
+  {
+    "type": "click",
+    "tag": "a",
+    "text": "Sign Out",
+    "sleep": 2
+  }
+]

@@ -235,9 +235,19 @@ window.addEventListener('resize', () => {
     </div>
 
     <script type="module">
-        import { createApp, ref, reactive, nextTick, watchEffect } from './libs/zog.es.js';
+        import { createApp, ref, reactive, nextTick, watchEffect, use } from './libs/zog.es.js';
+        import {ZogToast} from './libs/toast/zog-toast.es.js';
+
+        use(ZogToast,{
+            position: 'top-center',
+            duration: 3000
+        });
 
         createApp(() => {
+
+            setTimeout(() => {
+                $toast.success('Welcome to the Automation Dashboard!');
+            }, 4000);
             // --- State ---
             const excelFiles = ref([]);
             const workflowFiles = ref([]);

@@ -1,0 +1,26 @@
+[
+  {
+    "name": "everyday-parenting",
+    "exams_step_dir": "browser/exams_primary/everyday-parenting"
+  },
+  {
+    "name": "IFS-OK",
+    "exams_step_dir": "browser/exams_primary/pesi/ifs/steps"
+  },
+    {
+    "name": "DSM5-OK",
+    "exams_step_dir": "browser/exams_primary/pesi/DSM5/steps"
+  },
+  {
+    "name": "TEST",
+    "exams_step_dir": "browser/exams_primary/pesi/test"
+  },
+  {
+    "name": "register-pesi-users",
+    "exams_step_dir": "browser/exams_primary/pesi/register/pesi-register-steps"
+  },
+  {
+    "name": "register-pesi-uk-users",
+    "exams_step_dir": "browser/exams_primary/pesi/register/pesi-uk-register-steps"
+  }
+]
